@@ -1,0 +1,272 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Estación Longchamps 1910 · Simulador 360°</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{--bg:rgba(30,26,20,.86);--fg:#f3ead6;--ac:#d4a950;box-sizing:border-box;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+html,body{margin:0;height:100%;background:#222;overflow:hidden;font-family:Georgia,'Times New Roman',serif;color:var(--fg)}
+canvas{display:block;position:fixed;inset:0;touch-action:none}
+.p{background:var(--bg);border:1px solid #6b5a38;border-radius:8px;padding:8px 12px;backdrop-filter:blur(4px)}
+#hud{position:fixed;left:10px;top:calc(env(safe-area-inset-top,0px) + 10px);font-size:14px;max-width:60vw}
+#hud b{color:var(--ac);display:block}
+#ctl{position:fixed;right:10px;top:calc(env(safe-area-inset-top,0px) + 10px);display:flex;flex-direction:column;gap:6px}
+button{font:inherit;font-size:13px;color:var(--fg);background:var(--bg);border:1px solid #6b5a38;border-radius:6px;padding:6px 10px;cursor:pointer}
+button.off{opacity:.45;text-decoration:line-through}
+#poi,#info{position:fixed;left:50%;transform:translateX(-50%);max-width:min(560px,92vw);font-size:14px;line-height:1.45}
+#poi{bottom:60px;display:none}#info{top:70px;display:none;max-height:60vh;overflow:auto}
+#poi h3,#info h3{margin:0 0 4px;color:var(--ac)}
+#hint{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);left:50%;transform:translateX(-50%);font-size:12px;opacity:.85;text-align:center;white-space:nowrap}
+#go{position:fixed;inset:0;background:radial-gradient(#4a3f2a,#15120d);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;z-index:9}
+#go h1{font-size:clamp(26px,6vw,48px);margin:0 0 6px;letter-spacing:2px}#go p{max-width:520px;opacity:.9;line-height:1.5}
+#go button{font-size:18px;padding:12px 26px;background:var(--ac);color:#201a10;border:0;margin-top:12px}
+#fwd{position:fixed;left:14px;bottom:60px;width:64px;height:64px;border-radius:50%;display:none;font-size:22px}
+canvas{filter:sepia(.38) contrast(1.08) saturate(.8) brightness(.96)}
+#vg{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 52%,rgba(25,14,4,.6) 100%)}
+#cap{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 100px);display:none;font-size:15px;max-width:min(560px,90vw);text-align:center;font-style:italic}
+#cap b{color:var(--ac);font-style:normal}
+#vp button,#vp input{margin:3px 0;display:block;max-width:100%}
+</style></head><body>
+<div id="go"><h1>ESTACIÓN LONGCHAMPS</h1><p>Ferrocarril del Sud · Año 1910 · Reconstrucción histórica interpretativa. Caminá por el andén, escuchá la locomotora a vapor, al guarda, a los vendedores de café y a la gente de la estación. Usá auriculares y subí el volumen. Tocá o hacé clic en la gente, los vendedores, el guarda y la locomotora: te responden.</p><p style="font-size:13px;opacity:.7">WASD / flechas: moverse · Mouse: mirar (clic para capturar) · Shift: correr · E: interactuar con puntos dorados</p><button id="start">Entrar a la estación</button></div>
+<div id='vp' class='p' style='display:none;position:fixed;right:10px;top:calc(env(safe-area-inset-top,0px) + 250px);max-width:250px;font-size:13px;line-height:1.4'><b>Voz real del guarda</b><br>Grabá (o subí un audio de) la frase «¡Tren a Constitución!» con una voz grave y argentina. Se reproduce espacializada y más grave.<button id='vrec'>🔴 Grabar</button><input id='vfile' type='file' accept='audio/*'><button id='vtest'>▶ Probar</button><button id='vdel'>✖ Quitar</button><i id='vpm'></i></div><div id="vg"></div><div id="cap" class="p"></div>
+<div id="hud" class="p"><b id="sc">…</b><span id="tm"></span></div>
+<div id="ctl"><button data-g="amb">🌬 Ambiente</button><button data-g="voz">📢 Voces y anuncios</button><button data-g="tren">🚆 Trenes</button><button data-g="pas">👣 Pasos</button><button id="rec">🎙 Voz del guarda</button><button id="ib">ℹ Historia</button><button id="vr" hidden>🥽 Modo VR</button></div>
+<button id="fwd">▲</button>
+<div id="poi" class="p"></div>
+<div id="info" class="p"><h3>Estación Longchamps</h3><p>Longchamps pertenece al Ferrocarril del Sud, que en 1910 operaba con <b>locomotoras a vapor</b> y coches de madera: la electrificación llegó recién décadas después. Esta recreación es una <b>interpretación histórica</b>: disposición, colores, carteles, vestimenta y voces son aproximaciones coherentes con la época, no hechos documentados.</p><p>Las voces usan la síntesis de tu navegador: para el acento rioplatense elegí un dispositivo con voz «Español (Argentina)» instalada (Chrome/Edge en Windows o Safari en iPhone/Mac suelen tenerla).</p><button onclick="this.parentNode.style.display='none'">Cerrar</button></div>
+<div id="hint">Año 1910 · Recorrido automático: llegada → permanencia → salida del tren</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const T=THREE,$=i=>document.getElementById(i),V=(x,y,z)=>new T.Vector3(x,y,z),rnd=(a,b)=>a+Math.random()*(b-a);
+const R=new T.WebGLRenderer({antialias:true});R.setPixelRatio(Math.min(devicePixelRatio,2));R.setSize(innerWidth,innerHeight);R.shadowMap.enabled=true;R.outputEncoding=T.sRGBEncoding;R.xr.enabled=true;document.body.appendChild(R.domElement);
+const S=new T.Scene(),sky=new T.Color(0xb9c7cf);S.background=sky;S.fog=new T.Fog(0xb9c7cf,50,300);
+const cam=new T.PerspectiveCamera(72,innerWidth/innerHeight,.1,600),rig=new T.Group();rig.add(cam);S.add(rig);cam.position.y=1.65;rig.position.set(-3,1,3);
+addEventListener('resize',()=>{R.setSize(innerWidth,innerHeight);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix()});
+const M=(c,o={})=>new T.MeshStandardMaterial(Object.assign({color:c,roughness:.9,metalness:0},o));
+function ctex(w,h,fn,rx=1,ry=1){const c=document.createElement('canvas');c.width=w;c.height=h;fn(c.getContext('2d'),w,h);const t=new T.CanvasTexture(c);t.wrapS=t.wrapT=T.RepeatWrapping;t.repeat.set(rx,ry);t.encoding=T.sRGBEncoding;return t}
+const brick=ctex(256,256,(x,w,h)=>{x.fillStyle='#b9a58c';x.fillRect(0,0,w,h);for(let r=0;r<16;r++)for(let c=0;c<8;c++){x.fillStyle=`hsl(${12+rnd(-4,6)},${45+rnd(-8,8)}%,${33+rnd(-6,6)}%)`;x.fillRect(c*32+(r%2?16:0)+1,r*16+1,30,14)}},8,2);
+const gravel=ctex(128,128,(x,w,h)=>{x.fillStyle='#6d6a63';x.fillRect(0,0,w,h);for(let i=0;i<1500;i++){x.fillStyle=`hsl(40,5%,${rnd(30,62)}%)`;x.fillRect(rnd(0,w),rnd(0,h),2,2)}},150,150);
+const conc=ctex(256,256,(x,w,h)=>{x.fillStyle='#a8a396';x.fillRect(0,0,w,h);for(let i=0;i<2500;i++){x.fillStyle=`hsla(40,8%,${rnd(35,70)}%,.5)`;x.fillRect(rnd(0,w),rnd(0,h),2,2)}x.strokeStyle='#7d786c';x.strokeRect(0,0,w,h)},60,4);
+const tin=ctex(64,64,(x,w,h)=>{x.fillStyle='#8c9091';x.fillRect(0,0,w,h);x.fillStyle='#6f7374';for(let i=0;i<w;i+=8)x.fillRect(i,0,3,h)},60,1);
+function sign(t,w,h,bg,fg,fs,sub){const k=ctex(512,Math.round(512*h/w),(x,cw,ch)=>{x.fillStyle=bg;x.fillRect(0,0,cw,ch);x.strokeStyle=fg;x.lineWidth=6;x.strokeRect(8,8,cw-16,ch-16);x.fillStyle=fg;x.textAlign='center';x.textBaseline='middle';x.font=`bold ${fs}px Georgia`;x.fillText(t,cw/2,sub?ch*.38:ch/2);if(sub){x.font=`${fs*.45}px Georgia`;x.fillText(sub,cw/2,ch*.74)}});return new T.Mesh(new T.PlaneGeometry(w,h),new T.MeshBasicMaterial({map:k}))}
+function box(w,h,l,m,x,y,z,p=S,sh=true){const b=new T.Mesh(new T.BoxGeometry(w,h,l),m);b.position.set(x,y,z);b.castShadow=b.receiveShadow=sh;p.add(b);return b}
+/* luz */
+const hemi=new T.HemisphereLight(0xdfe9ef,0x6b5f4a,.75);S.add(hemi);const sun=new T.DirectionalLight(0xfff0d0,1.1);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);const sc=sun.shadow.camera;sc.left=-50;sc.right=50;sc.top=40;sc.bottom=-40;sc.far=200;S.add(sun,sun.target);
+/* suelo, vías */
+const gm=new T.Mesh(new T.PlaneGeometry(700,700),M(0xffffff,{map:gravel}));gm.rotation.x=-Math.PI/2;gm.receiveShadow=true;S.add(gm);
+const steel=M(0x4a4a48,{metalness:.6,roughness:.5}),slp=new T.InstancedMesh(new T.BoxGeometry(.28,.14,2.6),M(0x3b2c20),600),mx=new T.Matrix4();let ix=0;
+[-2.5,-8].forEach(z=>{box(700,.3,3.6,M(0x7a756c),0,.15,z,S,false);for(let i=0;i<300;i++){mx.setPosition(-150+i,.37,z);slp.setMatrixAt(ix++,mx)}[-.72,.72].forEach(o=>box(700,.14,.1,steel,0,.44,z+o,S,false))});S.add(slp);
+/* andén */
+box(140,1,8.6,M(0xffffff,{map:conc}),0,.5,3.7);box(140,.012,.22,M(0xf2efe6),0,1.01,-.3,S,false);
+/* edificio */
+const bm=M(0xffffff,{map:brick});box(28,5,6,bm,0,3.5,12);box(29,.3,6.8,M(0xcfc6b4),0,6.15,12);
+const rg=new T.ConeGeometry(1,1,4);rg.rotateY(Math.PI/4);const roof=new T.Mesh(rg,M(0x6b3b2c));roof.scale.set(21.5,3.2,5.4);roof.position.set(0,7.9,12);roof.castShadow=true;S.add(roof);
+const dk=M(0x1a1612),fr=M(0xe5dcc5);
+for(let i=-3;i<=3;i++){if(i==0)continue;box(1.3,2.2,.1,fr,i*3.6,3.1,8.98,S,false);box(1.1,2,.12,dk,i*3.6,3.1,8.97,S,false)}
+box(2.2,3.2,.2,dk,0,2.6,8.95);let q=sign('SALA DE ESPERA',3.6,.6,'#2b4a3a','#f3ead6',46);q.position.set(0,4.6,8.9);q.rotation.y=Math.PI;S.add(q);
+const bol=box(1.8,1.2,.12,dk,-8,2.5,8.9);box(2.1,1.5,.1,fr,-8,2.5,8.95);q=sign('BOLETERÍA',2.1,.45,'#2b4a3a','#f3ead6',60);q.position.set(-8,3.5,8.88);q.rotation.y=Math.PI;S.add(q);
+q=sign('LONGCHAMPS',9,1.3,'#1d3556','#f3ead6',150,'F.C. SUD · 1910');q.position.set(0,5.6,8.85);q.rotation.y=Math.PI;S.add(q);
+/* marquesina */
+const cm=M(0x2d4a3a),lm=new T.MeshBasicMaterial({color:0xfff1b8});
+for(let x=-30;x<=30;x+=6){const c=new T.Mesh(new T.CylinderGeometry(.13,.16,4.4,10),cm);c.position.set(x,3.2,6.6);c.castShadow=true;S.add(c);box(.12,.12,7.4,cm,x,5.35,3.3);const l=new T.Mesh(new T.SphereGeometry(.14,8,8),lm);l.position.set(x+3,4.5,2.8);S.add(l);box(.02,.9,.02,steel,x+3,5,2.8,S,false)}
+const rf=box(66,.14,9.4,M(0xffffff,{map:tin}),0,5.55,4);rf.rotation.x=.07;
+for(let x=-24;x<=24;x+=24){q=sign('LONGCHAMPS',2.6,.5,'#1d3556','#f3ead6',70);q.position.set(x,2.7,6.45);q.rotation.y=Math.PI;S.add(q);q=sign('PELIGRO · NO CRUZAR LAS VÍAS',2.4,.45,'#f1d64a','#201a10',34);q.position.set(x+8,2.2,6.45);q.rotation.y=Math.PI;S.add(q)}
+for(let x=-18;x<=18;x+=12){const b=box(2.2,.1,.5,M(0x7a5232),x,1.5,7.7);box(2.2,.5,.08,M(0x7a5232),x,1.85,7.95);[-.9,.9].forEach(o=>box(.08,.5,.4,steel,x+o,1.25,7.7))}
+/* telégrafo, faroles a gas, reloj */
+const wdk=M(0x4a3626);for(let x=-120;x<=120;x+=30){box(.22,8,.22,wdk,x,4,-5.3);box(3.2,.14,.14,wdk,x,7.4,-5.3);box(3.2,.14,.14,wdk,x,6.8,-5.3);[-1.4,-.5,.5,1.4].forEach(o=>box(.1,.12,.1,M(0xcfd8d4),x+o,7.55,-5.3,S,false))}
+const lm2=new T.LineBasicMaterial({color:0x222222});[-1.4,-.5,.5,1.4].forEach(o=>S.add(new T.Line(new T.BufferGeometry().setFromPoints([V(-300,7.5,-5.3+o*0),V(300,7.5,-5.3)]),lm2)));
+const gl=new T.MeshBasicMaterial({color:0xffe2a0});for(let x=-36;x<=36;x+=12){box(.09,3.4,.09,M(0x1b1b1b),x,2.7,1.1,S,false);box(.34,.5,.34,gl,x,4.7,1.1,S,false);box(.46,.1,.46,M(0x1b1b1b),x,5,1.1,S,false)}
+[-6,6].forEach(x=>box(.8,2.2,.8,bm,x,8.8,12));
+const ckt=ctex(256,256,(x)=>{x.fillStyle='#f3ead6';x.beginPath();x.arc(128,128,124,0,7);x.fill();x.strokeStyle='#111';x.lineWidth=10;x.stroke();x.lineWidth=6;for(let i=0;i<12;i++){const a=i*Math.PI/6;x.beginPath();x.moveTo(128+Math.sin(a)*100,128-Math.cos(a)*100);x.lineTo(128+Math.sin(a)*116,128-Math.cos(a)*116);x.stroke()}x.lineWidth=9;x.beginPath();x.moveTo(128,128);x.lineTo(128+66*Math.sin(.5),128-66*Math.cos(.5));x.moveTo(128,128);x.lineTo(128,30);x.stroke()});
+const cl=new T.Mesh(new T.CircleGeometry(.6,28),new T.MeshBasicMaterial({map:ckt,transparent:true}));cl.position.set(-13,3.6,8.85);cl.rotation.y=Math.PI;S.add(cl);
+/* semáforo de brazo */
+const sg=new T.Group();sg.position.set(-34,0,-5.1);S.add(sg);box(.22,8,.22,M(0xe8e4da),0,4,0,sg);const arm=new T.Group();arm.position.set(.1,7.2,0);sg.add(arm);box(2.4,.35,.06,M(0xc22d23),1.2,0,0,arm);const lamp=box(.35,.35,.35,new T.MeshBasicMaterial({color:0xff2a1a}),0,6.3,.2,sg);
+/* árboles y fondo */
+for(let i=0;i<46;i++){const x=rnd(-200,200),z=-rnd(22,70);if(Math.random()<.7){const t=new T.Mesh(new T.CylinderGeometry(.3,.45,12,6),M(0x4a3a2a));t.position.set(x,6,z);S.add(t);const f=new T.Mesh(new T.SphereGeometry(rnd(2,3.4),8,6),M(0x3f5a2e));f.scale.y=2.4;f.position.set(x,12,z);S.add(f)}else box(rnd(8,14),rnd(3,5),rnd(6,9),M(0xcdbf9e),x,2.5,z-20)}
+const tank=new T.Mesh(new T.CylinderGeometry(3,3,3,12),M(0x6a6a66));tank.position.set(60,17,-45);S.add(tank);box(.6,15,.6,steel,60,7.5,-45);
+/* tren */
+function mkTrain(){const g=new T.Group(),T0={g,doors:[],x:-200,v:0,open:0},
+ blk=M(0x141414,{roughness:.5,metalness:.3}),red=M(0x8a1f1a),brs=M(0xb48a3a,{metalness:.6,roughness:.4}),wd=new T.MeshBasicMaterial({color:0x14181c}),
+ cyl=(r,l,m,x,y,z,p,ax)=>{const c=new T.Mesh(new T.CylinderGeometry(r,r,l,16),m);c.position.set(x,y,z);if(ax=='x')c.rotation.z=Math.PI/2;if(ax=='z')c.rotation.x=Math.PI/2;c.castShadow=true;p.add(c);return c};
+ const L=new T.Group();L.position.x=11;g.add(L);
+ cyl(.95,7,blk,0,2.6,0,L,'x');cyl(.22,1.3,blk,3,3.9,0,L);cyl(.46,.35,blk,3,4.65,0,L);cyl(.42,.2,brs,3,4.85,0,L);
+ const dm=new T.Mesh(new T.SphereGeometry(.42,12,8),brs);dm.position.set(.3,3.55,0);L.add(dm);cyl(.12,.5,brs,1.3,3.7,0,L);
+ box(2.3,2.7,2.6,M(0x1f3a2c),-2.6,3.15,0,L);box(2.8,.16,3,blk,-2.6,4.55,0,L);box(8.4,.5,2.3,blk,0,1.55,0,L);box(.35,.55,2.6,red,4.2,1.35,0,L);
+ const hl=new T.Mesh(new T.SphereGeometry(.22,8,8),new T.MeshBasicMaterial({color:0xfff0b8}));hl.position.set(3.55,2.9,0);L.add(hl);
+ [-1.8,0,1.8].forEach(x=>[-1,1].forEach(s=>cyl(.8,.14,blk,x,1.3,s*1.2,L,'z')));[-1,1].forEach(s=>{cyl(.4,.12,blk,3,.9,s*1.2,L,'z');box(3.8,.1,.1,M(0x6a6a66),0,1.3,s*1.32,L,false);cyl(.14,1.4,M(0x6a6a66),3,1.7,s*1.15,L,'x')});
+ box(3.8,1.9,2.6,blk,5.2,1.9,0,g);box(3.4,.55,2.2,M(0x2b2420),5.2,3.1,0,g);[-1,1].forEach(s=>[4,6.4].forEach(x=>cyl(.5,.12,blk,x,.9,s*1.1,g,'z')));
+ const wood=M(0x6a3b22,{roughness:.55}),dw=M(0x4b2a18),trim=M(0xb08d3a,{metalness:.5}),rf=M(0xcfc8b4);
+ [-3,-12.4].forEach(cx=>{const c=new T.Group();c.position.x=cx;g.add(c);box(9,2.5,2.8,wood,0,2.5,0,c);box(9.04,.1,2.84,trim,0,3.55,0,c);box(9.3,.22,2.6,rf,0,4,0,c);box(8,.3,1.3,rf,0,4.25,0,c);box(8,.5,2,blk,0,1,0,c);
+  [-3,3].forEach(o=>[-1,1].forEach(s=>cyl(.45,.12,blk,o,.75,s*1.0,c,'z')));
+  for(let j=0;j<5;j++)[-1,1].forEach(s=>{const w=new T.Mesh(new T.PlaneGeometry(1.0,.85),wd);w.position.set(-3.4+j*1.7,2.95,s*1.41);if(s<0)w.rotation.y=Math.PI;c.add(w)});
+  [-1,1].forEach(s=>{[-2.4,2.4].forEach(dx=>{const o=new T.Mesh(new T.PlaneGeometry(1.2,2.1),wd);o.position.set(dx,2.15,s*1.41);if(s<0)o.rotation.y=Math.PI;c.add(o);const d=box(1.2,2.1,.06,dw,dx,2.15,s*1.45,c);d.userData={x0:dx,s};if(s>0)T0.doors.push(d)});
+   const f=sign('A CONSTITUCIÓN',3.2,.45,'#111','#f3ead6',48);f.position.set(0,3.78,s*1.43);if(s<0)f.rotation.y=Math.PI;c.add(f)})});
+ return T0}
+const A=mkTrain(true),B=mkTrain(false);A.g.position.z=-2.5;B.g.position.z=-8;B.g.position.y=0;B.g.rotation.y=Math.PI;S.add(A.g,B.g);
+/* personas */
+const people=[],ppl=new T.Group();ppl.position.y=1;S.add(ppl);
+function person(t,c){const g=new T.Group(),skc=[0xe8c4a0,0xe0b48f,0xd2a07a,0xc08a62][Math.floor(Math.random()*4)],sk=M(skc),dr=t==1;g.scale.setScalar(rnd(.93,1.07));const b=new T.Mesh(dr?new T.ConeGeometry(.34,1.4,12):new T.CylinderGeometry(.2,.23,.7,10),M(c));b.position.y=dr?.72:1.05;b.castShadow=true;g.add(b);
+ const hr=['#1a1410','#3a2a1c','#6b4a2a','#8a8a86','#a0662a'][Math.floor(Math.random()*5)],fk='#'+new T.Color(skc).getHexString(),ft=ctex(256,128,(x,w,hh)=>{x.fillStyle=hr;x.fillRect(0,0,w,hh);x.fillStyle=fk;x.beginPath();x.ellipse(64,72,40,46,0,0,7);x.fill();x.fillStyle=hr;x.beginPath();x.ellipse(64,34,44,22,0,0,7);x.fill();x.fillStyle='#fff';[-15,15].forEach(o=>{x.beginPath();x.ellipse(64+o,66,7,4,0,0,7);x.fill()});x.fillStyle='#2a1c12';[-15,15].forEach(o=>{x.beginPath();x.arc(64+o,66,3,0,7);x.fill()});x.strokeStyle=hr;x.lineWidth=3;[-15,15].forEach(o=>{x.beginPath();x.moveTo(64+o-8,56);x.lineTo(64+o+8,55);x.stroke()});x.strokeStyle='rgba(120,70,50,.7)';x.lineWidth=2;x.beginPath();x.moveTo(64,68);x.lineTo(62,80);x.lineTo(67,81);x.stroke();x.strokeStyle='#8a3a30';x.lineWidth=3;x.beginPath();x.moveTo(55,92);x.quadraticCurveTo(64,96,73,92);x.stroke();if(!dr&&Math.random()<.5){x.fillStyle=hr;x.beginPath();x.ellipse(64,86,16,5,0,0,7);x.fill()}},1,1),h=new T.Mesh(new T.SphereGeometry(.13,16,12),new T.MeshStandardMaterial({map:ft,roughness:.85}));h.scale.y=1.12;h.position.y=1.58;g.add(h);
+ const nk=new T.Mesh(new T.CylinderGeometry(.05,.06,.12,8),sk);nk.position.y=1.43;g.add(nk);
+ const arms=[-1,1].map(s=>{const p=new T.Group();p.position.set(s*(dr?.2:.25),1.4,0);const a=new T.Mesh(new T.CylinderGeometry(.045,.04,.6,8),M(c));a.position.y=-.3;const hd=new T.Mesh(new T.SphereGeometry(.045,8,6),sk);hd.position.y=-.62;p.add(a,hd);g.add(p);return p});
+ const hc=[0x1a1714,0x2a2420,0x4a4036][Math.floor(Math.random()*3)],hat=new T.Group();let br,cr;
+ if(dr){br=new T.Mesh(new T.CylinderGeometry(.28,.28,.02,14),M(hc));cr=new T.Mesh(new T.CylinderGeometry(.12,.15,.1,10),M(hc))}
+ else if(t==2){br=new T.Mesh(new T.CylinderGeometry(.17,.17,.02,12),M(0x1d3556));cr=new T.Mesh(new T.CylinderGeometry(.13,.14,.1,10),M(0x1d3556))}
+ else if(Math.random()<.45){br=new T.Mesh(new T.CylinderGeometry(.24,.24,.02,14),M(0xc9b27a));cr=new T.Mesh(new T.CylinderGeometry(.11,.11,.09,10),M(0xc9b27a))}
+ else{br=new T.Mesh(new T.CylinderGeometry(.19,.19,.02,12),M(hc));cr=new T.Mesh(new T.CylinderGeometry(.1,.12,.13,10),M(hc))}
+ cr.position.y=.06;hat.add(br,cr);hat.position.y=1.66;g.add(hat);
+ const legs=[-1,1].map(s=>{const p=new T.Group();p.position.set(s*.09,.7,0);const l=new T.Mesh(new T.BoxGeometry(.11,.7,.13),M(0x2b2b30));l.position.y=-.35;p.add(l);g.add(p);return p});
+ ppl.add(g);const o={g,legs,arms,gn:dr?'f':'m',pt:dr?rnd(1.25,1.6):rnd(.7,1.05),ph:rnd(0,6),q:[],mode:'stand',sp:rnd(.9,1.3),home:null};people.push(o);return o}
+const cols=[0x1f1d1b,0x3a3430,0x2a2f38,0x4a3f33,0x5a2e2e,0x3b4a3c,0x6b5f4a];
+const wait=[],walk=[],alight=[];
+for(let i=0;i<9;i++){const p=person(i%3==1?1:0,cols[i%7]);p.g.position.set(rnd(-14,14),0,rnd(2,6.5));p.mode='stand';wait.push(p)}
+for(let i=0;i<5;i++){const p=person(i%2,cols[(i+2)%7]);p.g.position.set(rnd(-30,30),0,rnd(1.5,6));p.mode='walk';walk.push(p)}
+for(let i=0;i<6;i++){const p=person(i%2,cols[(i+3)%7]);p.g.visible=false;alight.push(p)}
+const guard=person(2,0x1d3556);guard.g.position.set(9,0,.2);guard.g.rotation.y=Math.PI;guard.mode='stand';const flag=box(.04,.04,.7,M(0x2e8a3c),.3,1.3,0,guard.g,false);
+const wk=person(2,0x2a4a7a);wk.g.position.set(-22,0,5);wk.mode='walk';walk.push(wk);
+/* vendedores */
+const vs=[],vl=[],wood0=M(0x7a5232);
+const cv=person(0,0x4a3a2a);cv.g.position.set(-26,0,5.5);cv.g.rotation.y=Math.PI;vs.push(cv);box(1.5,.9,.6,wood0,-26,1.45,4.7);const can=new T.Mesh(new T.CylinderGeometry(.22,.26,.6,12),M(0xb9b4a6,{metalness:.6,roughness:.4}));can.position.set(-26.4,2.2,4.7);S.add(can);box(.5,.02,.5,M(0xf2efe6),-25.6,1.91,4.7);
+const mw=person(1,0x6b5f4a);mw.g.position.set(20,0,5.5);mw.g.rotation.y=Math.PI;vs.push(mw);box(1.1,.15,.5,wood0,20,2.1,4.8);box(.9,.3,.4,M(0xc9a35a),20,2.3,4.8);
+const nb=person(0,0x5a4636);nb.g.position.set(-5,0,3);nb.sp=1.1;walk.push(nb);
+vl.push({pos:cv.g.position,g:'m',pitch:1,rate:1.05,who:'Vendedor de café',l:['¡Café, café caliente!','¡Café con leche, calentito, señores!','¡Cafecito, cafecito! ¡Pasen, pasen!']});
+vl.push({pos:mw.g.position,g:'f',pitch:1.4,rate:1.05,who:'Vendedora',l:['¡Medialunas calentitas, medialunas!','¡Facturas y bizcochitos, señora!','¡Empanadas calientes, empanadas!']});
+vl.push({pos:nb.g.position,g:'m',pitch:1.8,rate:1.15,who:'Diariero',l:['¡La Prensa, La Nación, diario de hoy!','¡Extra, extra! ¡Último momento!']});
+function upP(p,dt){const g=p.g;if(!g.visible)return;if(!p.q.length&&p.mode=='walk')p.q.push({x:rnd(-40,40),z:rnd(1.2,6.5)});
+ if(p.q.length){const t=p.q[0],dx=t.x-g.position.x,dz=t.z-g.position.z,d=Math.hypot(dx,dz);if(d<.25){p.q.shift();if(t.hide)g.visible=false;if(t.cb)t.cb()}else{g.position.x+=dx/d*p.sp*dt;g.position.z+=dz/d*p.sp*dt;g.rotation.y=Math.atan2(dx,dz);p.ph+=dt*p.sp*5;const s=Math.sin(p.ph)*.5;p.legs[0].rotation.x=s;p.legs[1].rotation.x=-s;if(p.arms){p.arms[0].rotation.x=-s*.8;p.arms[1].rotation.x=s*.8}if(Math.sin(p.ph)*Math.sin(p.ph-dt*p.sp*5)<0)step(g.position)}}
+ else{p.legs.forEach(l=>l.rotation.x=0);p.ph+=dt;g.rotation.z=Math.sin(p.ph*.8)*.01}}
+/* puntos de interés */
+const POI=[
+{n:'Boletería',p:V(-8,1.8,8),t:'La boletería era el corazón administrativo de la estación: allí se vendían los boletos de cartón y se atendían consultas. Interpretación: ventanilla enmarcada en madera clara.',s:'bell'},
+{n:'Cartel de la estación',p:V(0,3,8),t:'El nombre LONGCHAMPS aparecía en grandes letras sobre la fachada y en carteles esmaltados repetidos a lo largo del andén. Tipografía y colores son aproximados.',s:'chime'},
+{n:'Semáforo de brazo',p:V(-34,3,-4.2),t:'Las señales de brazo (semáforos) indicaban: brazo horizontal = detenerse, brazo inclinado = vía libre. Aquí se acciona según el tren se acerca o se detiene.',s:'click'},
+{n:'Coches de madera',p:V(-8,1.8,.8),t:'Coches de pasajeros de madera barnizada, con puertas por compartimiento y cartel de destino. Colores y numeración: interpretación, no dato documentado.',s:'door'},
+{n:'Locomotora a vapor',p:V(11,1.8,.8),t:'Las locomotoras a vapor consumían carbón y agua; por eso las estaciones tenían tanques elevados. Su silbato avisaba llegada y partida. Modelo y pintura: aproximación.',s:'chime'},
+{n:'Puesto de café',p:V(-26,1.8,4.3),t:'Vendedores ambulantes ofrecían café, facturas y diarios a los pasajeros. Escena inspirada en costumbres de la época.',s:'bell'},
+{n:'Marquesina del andén',p:V(14,2.2,5.5),t:'La marquesina de chapa sobre columnas metálicas protegía de lluvia y sol a quienes esperaban. Las columnas y faroles son una interpretación del estilo ferroviario británico-argentino.',s:'chime'}];
+const mk=new T.Mesh(new T.SphereGeometry(.2,12,12),new T.MeshBasicMaterial({color:0xffc94a}));POI.forEach(o=>{o.m=mk.clone();o.m.position.copy(o.p);S.add(o.m);o.near=false});
+/* audio */
+let AC,NB,G={},muted={},ready=false;
+const P3=(pos,g)=>{const p=AC.createPanner();p.panningModel='HRTF';p.distanceModel='inverse';p.refDistance=5;p.rolloffFactor=1.2;sp(p,pos);p.connect(G[g]);return p};
+function sp(p,v){if(p.positionX){p.positionX.value=v.x;p.positionY.value=v.y;p.positionZ.value=v.z}else p.setPosition(v.x,v.y,v.z)}
+function noise(){const s=AC.createBufferSource();s.buffer=NB;s.loop=true;s.start();return s}
+function flt(t,f,q=1){const b=AC.createBiquadFilter();b.type=t;b.frequency.value=f;b.Q.value=q;return b}
+function gn(v){const g=AC.createGain();g.gain.value=v;return g}
+function osc(t,f){const o=AC.createOscillator();o.type=t;o.frequency.value=f;o.start();return o}
+function env(g,v,a,d){const t=AC.currentTime;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v,t+a);g.gain.exponentialRampToValueAtTime(.0001,t+a+d)}
+function burst(pos,g,f,v,d,type='bandpass'){if(!ready)return;const n=AC.createBufferSource();n.buffer=NB;const fl=flt(type,f),e=gn(0);n.connect(fl).connect(e).connect(pos?P3(pos,g):G[g]);n.start(0,Math.random());env(e,v,.005,d);n.stop(AC.currentTime+d+.1)}
+function tone(pos,g,f,v,d,type='sine',f2){if(!ready)return;const o=AC.createOscillator();o.type=type;o.frequency.value=f;if(f2)o.frequency.linearRampToValueAtTime(f2,AC.currentTime+d);const e=gn(0);o.connect(e).connect(pos?P3(pos,g):G[g]);o.start();env(e,v,.01,d);o.stop(AC.currentTime+d+.1)}
+function step(pos){if(ready&&pos.distanceTo(rig.position)<30)burst(pos,'pas',300,.18,.09,'lowpass')}
+function horn(pos){if(!ready)return;const t=AC.currentTime,pn=P3(pos,'tren'),mg=gn(0);mg.connect(pn);mg.gain.setValueAtTime(0,t);mg.gain.linearRampToValueAtTime(.5,t+.12);mg.gain.setValueAtTime(.5,t+1.5);mg.gain.linearRampToValueAtTime(0,t+2.4);
+ [262,330,392].forEach(f=>{const o=osc('sawtooth',f),l=flt('lowpass',1800);o.frequency.setValueAtTime(f*.93,t);o.frequency.linearRampToValueAtTime(f,t+.25);o.frequency.setValueAtTime(f,t+1.5);o.frequency.linearRampToValueAtTime(f*.88,t+2.4);o.connect(l).connect(mg);o.stop(t+2.5)});
+ const n=noise(),nf=flt('bandpass',2400,1.2),ng=gn(.06);n.connect(nf).connect(ng).connect(mg);n.stop(t+2.5)}
+function whistle(pos){if(!ready)return;[0,.5].forEach(d=>setTimeout(()=>{const o=osc('sine',2500),v=osc('sine',28),vg=gn(80),e=gn(0);v.connect(vg).connect(o.frequency);o.connect(e).connect(P3(pos,'tren'));env(e,.25,.02,.35);o.stop(AC.currentTime+.5);v.stop(AC.currentTime+.5)},d*1000))}
+function doorSnd(pos,open){burst(pos,'tren',3500,.25,.7,'highpass');setTimeout(()=>tone(pos,'tren',open?110:80,.5,.2,'triangle'),open?100:600)}
+function brake(pos){if(!ready)return;const n=noise(),f=flt('bandpass',2600,6),e=gn(0),t=AC.currentTime;f.frequency.linearRampToValueAtTime(900,t+4);n.connect(f).connect(e).connect(P3(pos,'tren'));e.gain.linearRampToValueAtTime(.18,t+.6);e.gain.linearRampToValueAtTime(0,t+4);setTimeout(()=>n.stop(),4200)}
+function chime(){[0,.8,1.6].forEach(d=>setTimeout(()=>{tone(null,'voz',1175,.22,1.8);tone(null,'voz',2349,.08,1);tone(null,'voz',1760,.05,1.3)},d*1000))}
+let VO=[];function initVoices(){if(!window.speechSynthesis)return;const f=()=>{VO=speechSynthesis.getVoices()};f();speechSynthesis.onvoiceschanged=f}
+function pick(g){const es=VO.filter(v=>/^es/i.test(v.lang)),ar=es.filter(v=>/es[-_]AR/i.test(v.lang)),la=es.filter(v=>/es[-_](MX|US|419|CO|CL|UY|PE)/i.test(v.lang)),pool=ar.length?ar:la.length?la:es,m=/diego|tom[aá]s|jorge|juan|carlos|pablo|male|hombre/i,fm=/elena|paulina|m[oó]nica|sabina|luciana|female|mujer|helena/i;const ok=pool.filter(v=>(g=='m'?m:fm).test(v.name)),nat=/natural|neural|online/i;return ok.find(v=>nat.test(v.name))||ok[0]||pool.find(v=>nat.test(v.name))||pool[0]||null}
+let cpt;function say(t,o){const d=o.pos?o.pos.distanceTo(rig.position):0;if(muted.voz||d>48)return;const c=$('cap');c.innerHTML='<b>'+o.who+':</b> '+t;c.style.display='block';clearTimeout(cpt);cpt=setTimeout(()=>c.style.display='none',3800);if(!window.speechSynthesis)return;if(o.cancel)speechSynthesis.cancel();else if(speechSynthesis.speaking)return;const u=new SpeechSynthesisUtterance(t),v=pick(o.g);u.lang='es-AR';if(v){u.voice=v;u.lang=v.lang}u.pitch=o.pitch;u.rate=o.rate;u.volume=Math.max(.2,Math.min(1,1.25-d/38));speechSynthesis.speak(u)}
+function capt(h){const c=$('cap');c.innerHTML=h;c.style.display='block';clearTimeout(cpt);cpt=setTimeout(()=>c.style.display='none',3800)}
+function shout(t){if(/Constituci/.test(t)&&gbuf&&!muted.voz){capt('<b>Guarda:</b> ¡Tren a Constitución!');gPlay();return}say(t,{g:'m',pitch:.55,rate:.9,pos:guard.g.position,who:'Guarda',cancel:1})}
+function announce(t){if(!ready)return;chime();setTimeout(()=>shout(t),1800)}
+function startVendors(){const n=()=>{if(!muted.voz){const v=vl[Math.floor(Math.random()*vl.length)];say(v.l[Math.floor(Math.random()*v.l.length)],v)}setTimeout(n,rnd(5000,9000))};setTimeout(n,3500)}
+function trainSnd(dir){const wn=noise(),wf=flt('bandpass',1000,.7),ck=gn(.5),lf=osc('square',1),lg=gn(.5),wl=gn(0),hs=noise(),hf=flt('highpass',4500),hg=gn(0),pn=P3(V(0,2,0),'tren');let nx=0;
+ wn.connect(wf).connect(ck).connect(wl).connect(pn);lf.connect(lg).connect(ck.gain);hs.connect(hf).connect(hg).connect(pn);
+ function chuff(s){const n=AC.createBufferSource();n.buffer=NB;const f=flt('lowpass',350+s*450),e=gn(0),t=AC.currentTime;n.connect(f).connect(e).connect(pn);n.start(0,Math.random());e.gain.setValueAtTime(0,t);e.gain.linearRampToValueAtTime(.7,t+.015);e.gain.exponentialRampToValueAtTime(.001,t+.16);n.stop(t+.2)}
+ return{up(x,z,v){const s=Math.min(Math.abs(v)/21,1),inr=Math.abs(x)<200;wl.gain.value=inr?s*.4:0;lf.frequency.value=s*14+.1;hg.gain.value=inr?(s<.05?.035:.012):0;const now=performance.now()/1000;if(inr&&s>.03&&now>nx){chuff(s);nx=now+1/(1.5+s*6)}sp(pn,V(x+dir*6,2,z))}}}
+let tsA,tsB;
+function audioInit(){AC=new(window.AudioContext||webkitAudioContext)();['amb','voz','tren','pas'].forEach(k=>{G[k]=AC.createGain();G[k].connect(AC.destination)});
+ NB=AC.createBuffer(1,AC.sampleRate*2,AC.sampleRate);const d=NB.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;ready=true;
+ const w=noise(),wg=gn(.07),wl=osc('sine',.15),wlg=gn(.04);w.connect(flt('lowpass',420)).connect(wg).connect(G.amb);wl.connect(wlg).connect(wg.gain);
+ [V(-10,1.8,4),V(12,1.8,5)].forEach((p,i)=>{const n=noise(),g=gn(.07),l=osc('sine',.2+i*.1),lg=gn(.04);n.connect(flt('bandpass',550,.6)).connect(g).connect(P3(p,'voz'));l.connect(lg).connect(g.gain)});
+ tsA=trainSnd(1);tsB=trainSnd(-1);
+ setInterval(()=>{if(muted.amb)return;const p=V(rig.position.x+rnd(-25,25),rnd(5,12),rnd(-30,-10)),n=2+Math.floor(Math.random()*3);for(let i=0;i<n;i++)setTimeout(()=>tone(p,'amb',rnd(3000,4600),.06,.12,'sine',rnd(3500,5200)),i*160)},3200)}
+/* UI */
+document.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{const k=b.dataset.g;muted[k]=!muted[k];b.classList.toggle('off',muted[k]);if(G[k])G[k].gain.value=muted[k]?0:1});
+$('ib').onclick=()=>{const e=$('info');e.style.display=e.style.display=='block'?'none':'block'};
+if(navigator.xr)navigator.xr.isSessionSupported('immersive-vr').then(o=>{if(o)$('vr').hidden=false}).catch(()=>{});
+$('vr').onclick=async()=>{const s=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor']});R.xr.setReferenceSpaceType('local-floor');await R.xr.setSession(s);cam.position.y=0};
+if('ontouchstart' in window)$('fwd').style.display='block';
+let go=false;$('start').onclick=()=>{audioInit();initVoices();startVendors();loadStored();$('go').style.display='none';go=true};
+/* controles */
+const K={};let yaw=0,pitch=0,fw=false,lock=false;
+addEventListener('keydown',e=>{K[e.code]=1;if(e.code=='KeyE')interact()});addEventListener('keyup',e=>K[e.code]=0);
+R.domElement.onclick=()=>{if(go&&!('ontouchstart' in window))R.domElement.requestPointerLock?.()};
+document.addEventListener('pointerlockchange',()=>lock=document.pointerLockElement===R.domElement);
+let drag=false,lx,ly;const look=(dx,dy)=>{yaw-=dx*.004;pitch=Math.max(-1.3,Math.min(1.3,pitch-dy*.004))};
+addEventListener('mousemove',e=>{if(lock)look(e.movementX,e.movementY);else if(drag){look(e.clientX-lx,e.clientY-ly);lx=e.clientX;ly=e.clientY}});
+R.domElement.addEventListener('pointerdown',e=>{drag=true;lx=e.clientX;ly=e.clientY});addEventListener('pointerup',()=>drag=false);
+$('fwd').addEventListener('touchstart',e=>{e.preventDefault();fw=true});$('fwd').addEventListener('touchend',()=>fw=false);
+function interact(){let b=null,bd=6;POI.forEach(o=>{const d=o.p.distanceTo(rig.position);if(d<bd){bd=d;b=o}});if(b)showPoi(b)}
+let pt;function showPoi(o){const e=$('poi');e.innerHTML=`<h3>${o.n}</h3>${o.t}`;e.style.display='block';clearTimeout(pt);pt=setTimeout(()=>e.style.display='none',14000);if(o.s=='bell')tone(o.p,'amb',1400,.4,1.2);else if(o.s=='chime')chime();else if(o.s=='door')doorSnd(o.p,true);else burst(o.p,'amb',2000,.4,.15)}
+/* escenas */
+const SC={idle:['Escena 1 · Estación en funcionamiento',10],arrive:['Escena 2 · Llegada de una formación',18],dwell:['Escena 3 · Permanencia en el andén',17],depart:['Escena 4 · Salida del tren',17]},next={idle:'arrive',arrive:'dwell',dwell:'depart',depart:'idle'};
+let st='idle',stt=0,ev={},fx=0;const doorX=()=>{const a=[];[-3,-12.4].forEach(c=>[-2.4,2.4].forEach(o=>a.push(A.x+c+o)));return a};
+function once(k,fn){if(!ev[k]){ev[k]=1;fn()}}
+function setSt(n){st=n;stt=0;ev={};$('sc').textContent=SC[n][0];
+ if(n=='idle'){A.x=-200;A.v=0;wait.concat(walk).forEach(p=>{if(!p.g.visible){p.g.visible=true;p.g.position.set(rnd(-20,20),0,rnd(2,6.5))}});alight.forEach(p=>p.g.visible=false)}}
+function updTrain(dt){const t=stt;
+ if(st=='idle'){A.x=-200;A.v=0;once('p',()=>announce('¡Atención, señores pasajeros! ¡Tren a Constitución, por la vía uno!'))}
+ else if(st=='arrive'){const s=Math.min(t/17,1);A.x=-170*(1-s)*(1-s);A.v=340*(1-s)/17;if(t>1)once('h',()=>horn(V(A.x+10,3,-2.5)));if(t>9)once('b',()=>brake(V(A.x,1,-2.5)));if(t>13)once('h2',()=>horn(V(A.x+10,3,-2.5)))}
+ else if(st=='dwell'){A.x=0;A.v=0;A.open=Math.min(1,Math.max(0,(t-1.5)/1.5));if(t>1.5)once('d',()=>doorSnd(V(0,2,-1),true));
+  if(t>2)once('al',()=>{const dx=doorX();alight.forEach((p,i)=>{p.g.visible=true;p.g.position.set(dx[(i*2)%dx.length],0,-.1);const tx=rnd(-30,30);p.q=[{x:p.g.position.x,z:1.5},{x:tx,z:rnd(2,6)},{x:tx>0?46:-46,z:rnd(2,6),hide:1}]})});
+  if(t>5)once('pa',()=>announce('¡Señores pasajeros, no crucen las vías! ¡Dejen bajar antes de subir!'));
+  if(t>11.5)once('c2',()=>shout('¡Tren a Constitución! ¡Pasajeros al tren!'));if(t>7)once('bd',()=>{const dx=doorX();wait.slice(0,5).forEach((p,i)=>{const d=dx.reduce((a,b)=>Math.abs(b-p.g.position.x)<Math.abs(a-p.g.position.x)?b:a);p.q=[{x:d,z:2.5},{x:d,z:-.1,hide:1}];p.mode='go'})})}
+ else{const s0=5,s=Math.max(0,(t-s0)/12);A.x=170*s*s;A.v=340*s/12;if(t>.5)once('w',()=>{shout('¡Tren a Constitución, sale el tren!');whistle(V(9,2.2,.3));flag.rotation.x=0;guard.g.children.forEach(c=>0)});if(t>2.5){once('dc',()=>doorSnd(V(0,2,-1),false));A.open=Math.max(0,1-(t-2.5)/1.5)}if(t>4)once('h3',()=>horn(V(A.x+10,3,-2.5)))}
+ A.g.position.x=A.x;A.doors.forEach(d=>d.position.x=d.userData.x0+A.open*1.15);
+ /* tren lejano */
+ fx+=dt;const cyc=fx%45;B.x=cyc<22?260-cyc*(520/22):300;B.v=cyc<22?-(520/22):0;B.g.position.x=B.x;if(cyc<.1)once('fh',()=>horn(V(200,3,-8)));if(cyc>1)ev.fh=cyc>22?0:ev.fh;
+ const ca=Math.abs(A.x)>195&&st!='dwell';tsA&&tsA.up(A.x,-2.5,A.v);tsB&&tsB.up(B.x,-8,B.v);
+ /* semáforo */
+ const clear=st=='arrive'||st=='depart';arm.rotation.z+=((clear?-.75:0)-arm.rotation.z)*Math.min(1,dt*2);lamp.material.color.set(clear?0x35d06a:0xff2a1a)}
+const sm=[],smg=new T.SphereGeometry(1,8,6);for(let i=0;i<110;i++){const m=new T.Mesh(smg,new T.MeshBasicMaterial({color:0xd8d8d4,transparent:true,opacity:0,depthWrite:false}));m.visible=false;S.add(m);sm.push({m,l:0,t:1,v:V(0,0,0)})}
+function updSmoke(dt){[[A,1,-2.5],[B,-1,-8]].forEach(([k,d,z])=>{k.se=(k.se||0)-dt;if(k.se<=0&&Math.abs(k.x)<190){k.se=.11-Math.min(Math.abs(k.v)/21,1)*.05;const p=sm.find(q=>q.l<=0);if(p){p.l=p.t=3.2;p.m.position.set(k.x+d*14,5,z);p.m.scale.setScalar(.35);p.v.set(rnd(.2,.8)-k.v*.12,rnd(1.2,1.8),rnd(-.2,.4));p.m.visible=true}}});
+ sm.forEach(p=>{if(p.l>0){p.l-=dt;p.m.position.addScaledVector(p.v,dt);p.m.scale.addScalar(dt*.9);p.m.material.opacity=Math.max(0,p.l/p.t)*.55;if(p.l<=0)p.m.visible=false}})}
+/* voz grabada del guarda */
+let gbuf=null,mr=null,ch=[];
+async function loadAB(ab){gbuf=await AC.decodeAudioData(ab)}
+function vpMsg(t){$('vpm').textContent=t}
+function loadStored(){try{const d=localStorage.getItem('gv1910');if(d){const b=atob(d.split(',')[1]),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);loadAB(u.buffer).catch(()=>{})}}catch(_){}}
+async function saveG(b){try{await loadAB(await b.arrayBuffer());vpMsg('Voz cargada ✔ Probala.');const r=new FileReader();r.onload=()=>{try{localStorage.setItem('gv1910',r.result)}catch(_){}};r.readAsDataURL(b)}catch(e){vpMsg('No pude leer ese audio.')}}
+function gPlay(){if(!ready||!gbuf)return false;const s=AC.createBufferSource();s.buffer=gbuf;s.playbackRate.value=.9;const lo=AC.createBiquadFilter();lo.type='lowshelf';lo.frequency.value=250;lo.gain.value=9;s.connect(lo).connect(flt('lowpass',5000)).connect(AC.createDynamicsCompressor()).connect(P3(guard.g.position.clone().setY(2.6),'voz'));s.start();return true}
+$('rec').onclick=()=>{const e=$('vp');e.style.display=e.style.display=='block'?'none':'block'};
+$('vrec').onclick=async()=>{if(mr&&mr.state=='recording'){mr.stop();return}if(!ready){vpMsg('Primero entrá a la estación.');return}try{const st=await navigator.mediaDevices.getUserMedia({audio:true});mr=new MediaRecorder(st);ch=[];mr.ondataavailable=e=>ch.push(e.data);mr.onstop=()=>{st.getTracks().forEach(t=>t.stop());$('vrec').textContent='🔴 Grabar';saveG(new Blob(ch,{type:mr.mimeType}))};mr.start();$('vrec').textContent='⏹ Detener';setTimeout(()=>{if(mr.state=='recording')mr.stop()},7000);vpMsg('Grabando… decí: ¡Tren a Constitución!')}catch(e){vpMsg('No se pudo usar el micrófono. Probá con subir un audio.')}};
+$('vfile').onchange=e=>{const f=e.target.files[0];if(f){if(!ready){vpMsg('Primero entrá a la estación.');return}saveG(f)}};
+$('vtest').onclick=()=>{if(!gPlay())vpMsg('Todavía no hay voz cargada.')};
+$('vdel').onclick=()=>{gbuf=null;try{localStorage.removeItem('gv1910')}catch(_){}vpMsg('Se usa la voz sintética.')};
+/* interacción: tocar personas y locomotora */
+const RC=new T.Raycaster(),v2=new T.Vector2();let pd=null;
+const coin=()=>{tone(null,'amb',2093,.18,.15);setTimeout(()=>tone(null,'amb',2637,.18,.2),110)};
+const LM=['Buen día, señor.','¿Sabe si el tren sale en hora?','Hoy hace frío, ¿no?','Voy a Constitución, a ver a mi hermano.','Qué polvareda que hay hoy.'],LF=['Buen día, caballero.','Disculpe, ¿es el tren a Constitución?','Qué ventolera, ¡mi sombrero!','Voy a lo de mi tía, en la ciudad.'];
+R.domElement.addEventListener('pointerdown',e=>{pd={x:e.clientX,y:e.clientY,t:performance.now()}});
+addEventListener('pointerup',e=>{if(!go||!pd||R.xr.isPresenting)return;const m=Math.hypot(e.clientX-pd.x,e.clientY-pd.y),d=performance.now()-pd.t;pd=null;if(m<9&&d<500)pickAt(e)});
+function pickAt(e){v2.set(lock?0:e.clientX/innerWidth*2-1,lock?0:-e.clientY/innerHeight*2+1);RC.setFromCamera(v2,cam);let pp=null,isT=false,ht=null;
+ for(const h of RC.intersectObjects([ppl,A.g],true)){let u=h.object,a=null,t=false;while(u){if(u===A.g)t=true;if(u.parent===ppl)a=u;u=u.parent}if(a&&!a.visible)continue;if(a||t){pp=a;isT=t;ht=h;break}}
+ if(!ht)return;if(ht.distance>14){capt('<i>Acercate un poco más.</i>');return}
+ if(pp){const o=people.find(p=>p.g===pp);if(!o)return;o.hold=4.5;
+  if(o===guard){shout('¡El tren a Constitución sale en un momento, señor!');return}
+  let l,w=o.gn=='f'?'Pasajera':'Pasajero';
+  if(o===cv){l='¿Un cafecito, patrón? Son cinco centavos.';w='Vendedor de café';coin()}
+  else if(o===mw){l='¿Medialunas? Calentitas, recién hechas.';w='Vendedora';coin()}
+  else if(o===nb){l='¡La Prensa, patrón! Diez centavos.';w='Diariero';coin()}
+  else{const a=o.gn=='f'?LF:LM;l=a[Math.floor(Math.random()*a.length)]}
+  say(l,{g:o.gn,pitch:o.pt,rate:1,pos:o.g.position,who:w,cancel:1})}
+ else if(isT){if(ht.point.x>A.x+6){horn(ht.point.clone());capt('<i>¡Tiraste de la cuerda del silbato!</i>')}else capt('<i>Coche de madera barnizada.</i>')}}
+/* bucle */
+const clk=new T.Clock(),f=V(0,0,0),r=V(0,0,0),cp=V(0,0,0),up=V(0,1,0);let tod=0,stepT=0;
+setSt('idle');
+R.setAnimationLoop(()=>{const dt=Math.min(clk.getDelta(),.1);tod+=dt;
+ if(go){stt+=dt;if(stt>SC[st][1])setSt(next[st]);updTrain(dt)}updSmoke(dt);
+ /* clima/luz dinámica */
+ const a=.9+.35*Math.sin(tod*.02);sun.position.set(Math.cos(a)*-70,Math.sin(a)*70,30);sun.target.position.set(0,0,0);const w=1-Math.sin(a);sun.color.setHSL(.1,.5+w*.4,.85-w*.15);sky.setHSL(.57-w*.05,.25+w*.2,.72-w*.1);S.fog.color.copy(sky);$('tm').textContent=Math.floor(8+((tod*.02)%6)).toString().padStart(2,'0')+':'+(Math.floor(tod*3)%60).toString().padStart(2,'0')+' hs · 1910';
+ /* movimiento */
+ if(!R.xr.isPresenting){rig.rotation.y=yaw;cam.rotation.x=pitch}
+ cam.getWorldDirection(f);f.y=0;f.normalize();r.set(-f.z,0,f.x);let mf=(K.KeyW||K.ArrowUp||fw?1:0)-(K.KeyS||K.ArrowDown?1:0),ms=(K.KeyD||K.ArrowRight?1:0)-(K.KeyA||K.ArrowLeft?1:0);
+ if(R.xr.isPresenting){const s=R.xr.getSession();s&&s.inputSources.forEach(i=>{if(i.gamepad&&i.gamepad.axes.length>3){ms+=i.gamepad.axes[2];mf-=i.gamepad.axes[3]}})}
+ const spd=(K.ShiftLeft?4:2)*dt;rig.position.addScaledVector(f,mf*spd).addScaledVector(r,ms*spd);rig.position.x=Math.max(-45,Math.min(45,rig.position.x));rig.position.z=Math.max(-.1,Math.min(8.2,rig.position.z));rig.position.y=1;
+ if(go&&(mf||ms)){stepT+=dt;if(stepT>(K.ShiftLeft?.3:.5)){stepT=0;burst(null,'pas',350,.25,.09,'lowpass')}}
+ wait.concat(walk,alight,[guard],vs).forEach(p=>{if(p.mode=='go'&&!p.q.length)p.mode='gone';if(p.hold>0){p.hold-=dt;p.g.rotation.y=Math.atan2(rig.position.x-p.g.position.x,rig.position.z-p.g.position.z);return}upP(p,dt)});
+ if(!(guard.hold>0))guard.g.rotation.y=Math.PI;flag.rotation.x=st=='depart'&&stt>.3&&stt<4?Math.sin(tod*8)*.6:0;
+ POI.forEach(o=>{o.m.position.y=o.p.y+Math.sin(tod*2)*.08;const d=o.p.distanceTo(rig.position),n=d<3.5;if(n&&!o.near&&go)showPoi(o);o.near=n;o.m.scale.setScalar(n?1.5:1)});
+ /* listener */
+ if(ready){cam.getWorldPosition(cp);const L=AC.listener,fw3=new T.Vector3();cam.getWorldDirection(fw3);if(L.positionX){L.positionX.value=cp.x;L.positionY.value=cp.y;L.positionZ.value=cp.z;L.forwardX.value=fw3.x;L.forwardY.value=fw3.y;L.forwardZ.value=fw3.z;L.upX.value=0;L.upY.value=1;L.upZ.value=0}else{L.setPosition(cp.x,cp.y,cp.z);L.setOrientation(fw3.x,fw3.y,fw3.z,0,1,0)}}
+ R.render(S,cam)});
+</script></body></html>
